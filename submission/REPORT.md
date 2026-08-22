@@ -1,16 +1,16 @@
 # Lab 21 — Evaluation Report
 
 **Họ tên**: Ngô Mạnh Minh Huy  **MSSV**: 2A202601926  **Ngày**: 2026-08-22
-**Tier**: `T4`  **Base model**: `unsloth/Qwen3.5-4B`  **GPU thực tế**: `<điền sau khi chạy Colab — T4 16GB>`
+**Tier**: `T4`  **Base model**: `unsloth/Qwen3.5-4B`  **GPU thực tế**: `Tesla T4 (sm_75, 14.6 GB, fp16)`
 
 > Mọi con số dưới đây phải khớp với file trong `results/`. Grader kiểm tra chéo.
 >
-> **Trạng thái nộp bài**: NB1 (CPU) + test suite chạy PASS trên máy local (không GPU).
-> NB2–NB5 đã chạy trên Colab T4 nhưng ở **SMOKE MODE** (`EVAL_LIMIT=8`, chỉ 8/50 mẫu
-> target và 8/15 mẫu regression) — `verify.py` tự động FAIL mục "full eval set used" vì
-> đây không phải run nộp được. **Số liệu ở mục 3–7 dưới đây lấy từ run smoke đó, chỉ để
-> dựng khung** — PHẢI chạy lại NB2+NB5 (hoặc cả pipeline) với `EVAL_LIMIT` bỏ trống rồi
-> ghi đè `results/` trước khi nộp thật. Xem hướng dẫn cuối file.
+> **Trạng thái nộp bài**: NB1→NB5 chạy full trên Colab T4 (`EVAL_LIMIT` bỏ trống, n=50
+> target / n=15 regression). `results/*.json`, `runs.csv`, `adapters/correct/` đã push
+> lên repo. 3 unit test từng FAIL vì bug import trong `tests/test_env_and_silent_defaults.py`
+> (`from tests.fake_tokenizer import ...` thay vì `from fake_tokenizer import ...` như mọi
+> file test khác trong repo dùng — do `pyproject.toml` đặt `pythonpath = ["src", "tests"]`)
+> — đã sửa và xác nhận pass local.
 
 ---
 
@@ -20,7 +20,7 @@
 |---|---|
 | Dataset | seed corpus mặc định — 250 ticket CSKH → JSON triage (4 khoá: intent, urgency, product, sentiment) |
 | Train / val | 225 / 25 (seed 42) — *(data/split)* |
-| `max_length` | tier T4 mặc định = 1024; p95 đo được = **98** token (max=101) → `suggested_max_length=256` *(results/token_stats.json)*. Ghi chú: 1024 rộng hơn nhiều so với p95 vì đây là default tier chưa chỉnh; nên hạ xuống 256 khi train thật trên Colab để tiết kiệm VRAM/thời gian mà không cắt mẫu nào (max quan sát 101 < 256). |
+| `max_length` | tier T4 mặc định = 1024; p95 đo được = **98** token (max=101) → `suggested_max_length=256` *(results/token_stats.json)*. Ghi chú: 1024 rộng hơn nhiều so với p95 vì đây là default tier chưa chỉnh; không cắt mất mẫu nào (max quan sát 101 < 256) nhưng tốn VRAM/thời gian hơn cần thiết — có thể hạ xuống 256 ở lần chạy sau. |
 | `MASK_MODE` | `assistant-only` (mặc định) |
 | Epochs / max_steps | 2 epochs → 30 optimizer steps (225 train rows, batch 1 × grad_accum 16) — *(results/runs.csv)* |
 
@@ -60,39 +60,33 @@ Alo shop, mình đặt balo laptop mã đơn VN411453. Cho tôi trả lại. Đ�
 
 ---
 
-> **Từ đây trở xuống (mục 3–7, phụ lục) cần GPU.** Mở `colab/Lab21_RUN_ALL.ipynb` trên
-> Colab (Runtime → T4 GPU), chạy ô 1→4 (mở tab MỚI mỗi lần, đừng reconnect — xem README).
-> Sau khi chạy xong, tải `results/*.json`, `results/runs.csv` về, ghi đè vào thư mục
-> `results/` của repo local này, rồi điền các bảng dưới đây từ đúng các file đó. Cuối
-> cùng chạy `.venv/Scripts/python scripts/verify.py` để xác nhận PASS trước khi nộp.
-
 ## 3. Ba baseline (NB2 — đo TRƯỚC khi train)
 
-> ⚠️ SMOKE (n=8/nhóm, `EVAL_LIMIT=8`) — thay bằng số full (n=50 target / n=15 regression) trước khi nộp.
+Full run, `EVAL_LIMIT` bỏ trống — n=50 target, n=15 regression — *(results/baselines_frozen.json, results/verdict.json)*.
 
 | Run | target | regression | format | latency (ms) |
 |---|---|---|---|---|
-| (a) base + naive prompt | 0.000 | 0.750 | 0.000 | 3373.4 |
-| (b) base + optimized prompt | 0.688 | 0.750 | 1.000 | 1018.8 |
-| (c) LoRA fine-tune | 0.938 | 0.750 | 1.000 | 1563.4 |
+| (a) base + naive prompt | 0.000 | 0.7578 | 0.000 | 3146.4 |
+| (b) base + optimized prompt | 0.765 | 0.7578 | 1.000 | 976.9 |
+| (c) LoRA fine-tune | 0.970 | 0.6333 | 1.000 | 1425.8 |
 
-**(b) có thật sự mạnh hơn (a) không?** **Có** — 0.688 vs 0.000 trên target, và format nhảy
-từ 0 lên 1.0 (prompt tối ưu ép model trả JSON đúng khuôn). `verify.py` xác nhận
-`baseline (b) beats (a)` PASS và `baseline (b) prompt unmodified` PASS — `OPTIMIZED_PROMPT`
-dùng nguyên bản gốc repo, không chỉnh sửa (SHA `719e74d3b6232053` khớp bản gốc).
+**(b) có thật sự mạnh hơn (a) không?** **Có** — 0.765 vs 0.000 trên target, và format nhảy
+từ 0 lên 1.0 (prompt tối ưu ép model trả JSON đúng khuôn, ngay cả khi nội dung còn sai).
+`verify.py` xác nhận `baseline (b) beats (a)` PASS và `baseline (b) prompt unmodified`
+PASS — `OPTIMIZED_PROMPT` dùng nguyên bản gốc repo, không chỉnh sửa (SHA `719e74d3b6232053`).
 
 ---
 
 ## 4. Giải phẫu cấu hình sai (NB4)
 
-> ⚠️ Cột target lấy từ SMOKE (n=8) — thay bằng số full trước khi nộp. Cột trainable/LR/VRAM/s là số thật (không phụ thuộc `EVAL_LIMIT`).
+Full run — *(results/autopsy.json, results/runs.csv)*.
 
 | Run | vị trí | r | trainable | LR | train loss (NB4) | **target (NB5 §4)** | s | VRAM GB |
 |---|---|---|---|---|---|---|---|---|
-| `correct` | text-linear | 16 | 32,464,896 | 1e-4 | 0.6264 | 0.938 | 968.9 | 12.01 |
-| `attn_only` | q,v (matched) | 283 | 32,456,704 | 1e-4 | 0.5379 | 0.938 | 809.6 | 12.02 |
-| `wrong_lr` | text-linear | 16 | 32,464,896 | 1e-5 | 1.5704 | 0.000 | 934.3 | 12.01 |
-| `qlora` | text-linear | 16 | 32,464,896 | 1e-4 | 0.7058 | 0.844 | 985.3 | 7.09 |
+| `correct` | text-linear | 16 | 32,464,896 | 1e-4 | 0.6263 | 0.970 | 924.5 | 12.01 |
+| `attn_only` | q,v (matched) | 283 | 32,456,704 | 1e-4 | 0.5385 | 0.970 | 795.9 | 12.02 |
+| `wrong_lr` | text-linear | 16 | 32,464,896 | 1e-5 | 1.5704 | 0.000 | 932.6 | 12.01 |
+| `qlora` | text-linear | 16 | 32,464,896 | 1e-4 | 0.7058 | 0.940 | 1001.0 | 7.09 |
 
 > Xếp hạng bằng cột **target**, không bằng cột train loss — chấm bằng chỉ số thay thế
 > chính là Lỗi #3. Nếu hai cột cho hai thứ tự khác nhau, nói thẳng điều đó ở 4.1: đó là
@@ -106,128 +100,137 @@ thắng, thua, hay hoà? Thứ tự đó có giống thứ tự theo train loss 
 
 `attn_only` được `verify.py` xác nhận là đối chứng công bằng: 32,456,704 tham số huấn
 luyện so với 32,464,896 của `correct`, lệch < 0.03% (< 5% ngưỡng yêu cầu). Trên tập
-target chúng **hoà** — cả hai đạt 0.938. Nhưng train loss lại KHÔNG đồng thuận: `attn_only`
-kết thúc ở 0.5379, thấp hơn hẳn 0.6264 của `correct` — nếu xếp hạng bằng train loss (đúng
-lỗi 2.5 mà rubric cảnh báo) sẽ kết luận `attn_only` "tốt hơn", trong khi trên chỉ số thật
-(target accuracy) chúng ngang nhau. Điều này nói rằng ở ngân sách 32M tham số và 30 step
-này, **rank** (khớp ngân sách tham số) là đòn bẩy chính, không phải **vị trí gắn adapter**
-(chỉ q,v so với toàn bộ lớp linear) — khi đã match ngân sách, vị trí gắn không tạo khác
-biệt đo được trên tác vụ target, dù có tạo khác biệt trên train loss. *(Số target ở đây
-là SMOKE n=8 — cần xác nhận lại trên full 50 mẫu trước khi kết luận chắc chắn "hoà".)*
+target đầy đủ (n=50) chúng **hoà tuyệt đối** — cả hai đạt 0.970. Nhưng train loss lại
+KHÔNG đồng thuận: `attn_only` kết thúc ở 0.5385, thấp hơn hẳn 0.6263 của `correct` — nếu
+xếp hạng bằng train loss (đúng lỗi 2.5 mà rubric cảnh báo) sẽ kết luận `attn_only` "tốt
+hơn", trong khi trên chỉ số thật (target accuracy) chúng ngang nhau tuyệt đối. `attn_only`
+còn nhanh hơn (795.9s vs 924.5s train, 901.5ms vs 1425.8ms latency) vì có ít module hơn để
+forward/backward qua. Kết luận: ở ngân sách 32M tham số và 30 step này, **rank** (khớp
+ngân sách tham số) là đòn bẩy quyết định độ chính xác, không phải **vị trí gắn adapter**
+(chỉ q,v so với toàn bộ 12 lớp linear) — khi đã match ngân sách, vị trí gắn không tạo
+khác biệt đo được trên tác vụ target, dù có tạo khác biệt trên train loss và tốc độ.
 
 **4.2 — `wrong_lr` chỉ khác đúng một con số. Đường loss khác nhau ra sao? Nếu chỉ nhìn
 loss mà không biết LR, bạn sẽ kết luận sai điều gì?**
 
 LR bị hạ 10 lần (1e-5 thay vì 1e-4, đúng thang full-fine-tune thay vì thang LoRA). Loss
 giảm rất chậm và không hội tụ: từ 2.163 xuống chỉ còn 1.119 sau 30 step (so với `correct`
-rơi từ 2.163 xuống 0.026) — `mean_token_accuracy` dừng ở ~0.79, không bao giờ vượt 0.99
-như các run khác. Nếu chỉ nhìn con số loss cuối (1.57) mà không biết LR, sẽ dễ kết luận
+rơi từ 2.163 xuống 0.024) — `mean_token_accuracy` dừng ở ~0.79, không bao giờ vượt 0.99
+như các run khác. Nếu chỉ nhìn con số loss cuối (1.5704) mà không biết LR, sẽ dễ kết luận
 nhầm "model học chậm nhưng vẫn học được, chỉ cần train thêm step" — thực tế đo trên target
-lại là **0.000, sập hoàn toàn**, và latency tăng vọt lên 5051ms vì model sinh ra output
-dài, lộn xộn, không đúng format JSON (format=0.000). Loss "trông có vẻ ổn" che giấu một
-model đã hỏng hoàn toàn ở tác vụ thật — đây chính là lý do rubric cấm dùng train loss để
-xếp hạng.
+đầy đủ (n=50) lại là **0.000, sập hoàn toàn**, format cũng 0.000, và latency tăng vọt lên
+**5087.7ms** (gấp 5.5 lần `correct`) vì model sinh ra output dài, lộn xộn, không đúng
+format JSON, phải chạy hết max token mới dừng. Loss "trông có vẻ ổn" che giấu một model đã
+hỏng hoàn toàn ở tác vụ thật — đây chính là lý do rubric cấm dùng train loss để xếp hạng,
+và latency bất thường (5x) đôi khi là tín hiệu sớm hơn cả target score.
 
 **4.3 — `qlora` tiết kiệm bao nhiêu VRAM, trả giá bằng gì? Số đo của bạn có ủng hộ khuyến
 nghị "không dùng QLoRA cho dòng model này" không?**
 
-`qlora` dùng 7.09 GB VRAM đỉnh so với 12.01 GB của `correct` — tiết kiệm 4.92 GB (~41%).
-Đổi lại, target rơi từ 0.938 xuống 0.844 (mất ~0.094, tương đương ~10% tương đối), dù
-format vẫn giữ 1.000. Thời gian train cũng nhích lên (985s vs 969s) do overhead
-quantize/dequantize. Số đo này **ủng hộ một phần** khuyến nghị thận trọng của nhà cung
-cấp với QLoRA trên Qwen3.5: tiết kiệm VRAM là thật, nhưng cái giá về accuracy cũng thật —
-không phải "miễn phí". Với tier T4 (16GB) vốn đã đủ VRAM cho `correct` (12.01GB < 16GB),
-không có lý do để đánh đổi 10% target accuracy lấy VRAM không cần dùng đến; QLoRA chỉ hợp
-lý khi tier thực sự thiếu VRAM (vd. LAPTOP 8GB). *(Lại là số SMOKE n=8, cần xác nhận full.)*
+`qlora` dùng 7.09 GB VRAM đỉnh so với 12.01/12.02 GB của `correct`/`attn_only` — tiết kiệm
+4.92-4.93 GB (~41%). Đổi lại, target rơi từ 0.970 xuống 0.940 (mất 0.030, ~3% tương đối),
+format vẫn giữ 1.000. Thời gian train cũng nhích lên (1001.0s vs 924.5s, +8%) do overhead
+quantize/dequantize, và latency inference cao hơn (1747.1ms vs 1425.8ms). Số đo đầy đủ
+(n=50) cho thấy cái giá về accuracy **nhỏ hơn** ước tính ban đầu từ mẫu nhỏ — chỉ 0.030,
+không phải mức lớn. Điều này **ủng hộ một phần, không tuyệt đối** khuyến nghị thận trọng
+với QLoRA trên Qwen3.5: có đánh đổi thật (VRAM giảm, tốc độ train chậm hơn, target giảm
+nhẹ) nhưng đánh đổi accuracy khá nhỏ so với mức tiết kiệm VRAM lớn. Với tier T4 (16GB) vốn
+đã đủ VRAM cho `correct` (12.01GB < 16GB), không có lý do bắt buộc phải đánh đổi; nhưng
+nếu VRAM là nút thắt thật sự (tier LAPTOP 8GB), 3% target đổi lấy 41% VRAM là một đánh đổi
+hợp lý, không phải "cấm tuyệt đối" như khuyến nghị vendor gợi ý.
 
 ---
 
 ## 5. Phán quyết (NB5)
 
-> ⚠️ SMOKE (n=8) — chạy lại full trước khi nộp; PASS/FAIL có thể đổi.
+**Kết quả cổng hồi quy**: **FAILED**
+`target Δ = +0.205` · `regression Δ = -0.124` · `valid_trace_rate = 0.00`
 
-**Kết quả cổng hồi quy**: **PASSED**
-`target Δ = +0.250` · `regression Δ = +0.000` · `valid_trace_rate = 0.00`
+Lý do gate ghi lại: *"general capability regressed by 0.124 (tolerance 0.020). See deck
+§14.3 — add 1-5% replay data."*
 
-Fine-tune vượt baseline (b) đã prompt tối ưu 0.250 điểm target (0.938 vs 0.688) mà không
-làm tụt regression (0.750 → 0.750, Δ=0.000) — model vẫn giữ nguyên năng lực kiến thức
-phổ thông sau khi học tác vụ triage. `valid_trace_rate=0.00` không phải dấu hiệu xấu ở
-đây: corpus mặc định không có khối `<think>` chứa suy luận thật (đáp án luôn là JSON
-trần, template chỉ mở-đóng khối rỗng), nên không có "reasoning trace" nào để đo — chỉ số
-này chỉ có ý nghĩa khi chạy thử nghiệm B3 (reasoning-trace collapse) với dữ liệu có
-suy luận thật. Vì Δ regression bằng 0 (không âm), cổng PASS là hợp lệ chứ không phải
-PASS "may mắn" nhờ regression sập cùng lúc — đây là kịch bản tốt nhất: fine-tune thắng rõ
-ràng trên target, không trả giá bằng năng lực chung.
+Fine-tune (c) thắng rõ trên target: 0.970 vs 0.765 của baseline (b) đã prompt tối ưu
+(Δ=+0.205, lớn hơn nhiều so với ngưỡng cần để coi là cải thiện thật). Nhưng đồng thời làm
+**regression sập từ 0.7578 xuống 0.6333** (Δ=-0.1244), vượt xa dung sai ±0.020 mà cổng cho
+phép — đây là **catastrophic forgetting** kinh điển: 250 mẫu train chỉ tập trung vào một
+tác vụ hẹp (triage JSON) khiến model quên một phần năng lực kiến thức/chỉ dẫn phổ thông đo
+bằng 15 câu hỏi regression. `valid_trace_rate=0.00` không phải chỉ số gây FAIL ở đây —
+corpus mặc định không có suy luận thật trong `<think>` nên chỉ số này không áp dụng, gate
+FAIL hoàn toàn do regression, không liên quan reasoning trace.
 
-*(Diễn giải trên dựa vào SMOKE n=8 — PHẢI chạy lại NB2+NB5 không giới hạn `EVAL_LIMIT`,
-verdict full có thể khác con số 0.250/0.000 này, dù xu hướng nhiều khả năng giữ nguyên vì
-khoảng cách target khá lớn.)*
+Kết quả FAILED này **đáng tin và có thể giải thích được**, không phải lỗi pipeline: mask
+proof xanh, baseline (b) đã prompt tối ưu và không bị làm yếu, bốn run cùng step budget,
+`attn_only` là đối chứng công bằng — mọi điều kiện thí nghiệm đều đúng. Nguyên nhân gốc là
+**thiết kế dữ liệu train**: 225 mẫu train 100% là ticket CSKH, không có "replay data" (dữ
+liệu kiến thức phổ thông trộn vào 1-5% như deck §14.3 khuyến nghị) để giữ năng lực gốc.
+Nếu chỉ nhìn target Δ dương mà bỏ qua regression, sẽ kết luận nhầm "fine-tune thành công" —
+đây chính xác là bẫy mà thiết kế bốn-nhóm của lab được dựng ra để bắt.
 
 ---
 
 ## 6. Định tính — bắt buộc có cả ca THUA
 
-> ⚠️ Từ `results/qualitative.json` của run SMOKE (n=8) — ticket/prediction bị cắt ngắn
-> trong log Colab paste vào đây. **Trước khi nộp**: mở `results/qualitative.json` đầy đủ
-> (sau khi chạy lại full) để lấy nhãn đúng (`label`) và text đầy đủ, KHÔNG chỉ dùng bản
-> rút gọn này. Cột "(b) prompt" chưa có số — cần lấy từ output NB5 (so sánh 3-way) hoặc
-> chấp nhận so `(c)` với nhãn đúng như bảng dưới nếu NB5 không in riêng dự đoán của (b).
+Trích từ `results/qualitative.json` (full n=50). Trường `ft_pred` bị cắt ở ~90 ký tự trong
+log gốc; điểm số (`ft_score`) là tỷ lệ 4 trường đúng/4. Không có cột "(b) prompt" và "nhãn
+đúng" đầy đủ trong export này — `qualitative.json` chỉ lưu `i, ticket, ft_score, ft_pred`;
+xem `data/eval_target.jsonl` dòng tương ứng `i` để đối chiếu nhãn gốc khi cần chi tiết hơn.
 
 | # | Ticket (rút gọn) | ft_score | Dự đoán fine-tune (rút gọn) | Nhận xét |
 |---|---|---|---|---|
-| 1 | "...đèn bàn LED mã đơn VN339109. Vỡ khi nhận. Gấp." | 1.0 | `{"intent": "san_pham_loi", "urgency": "cao", ...}` | ✅ FT thắng |
-| 2 | "...balo laptop mã đơn DH863123. Đổi size." | 1.0 | `{"intent": "doi_tra", "urgency": "thap", ...}` | ✅ FT thắng |
-| 3 | "...máy xay sinh tố mã đơn OD126693. Muốn đổi." | 1.0 | `{"intent": "doi_tra", "urgency": "trung_binh", ...}` | ✅ FT thắng |
-| 4 | "...bình giữ nhiệt mã đơn VN804124. Chưa thấy tiền." | 0.75 | `{"intent": "hoan_tien", "urgency": "trung_binh", ...}` | ❌ **FT thua** (1 trong 4 trường sai — có thể sai `sentiment` hoặc `product`, xem JSON đầy đủ) |
-| 5 | "...nồi chiên không dầu mã đơn DH249548. Thiếu phụ kiện." | 0.75 | `{"intent": "san_pham_loi", "urgency": "trung_binh", ...}` | ❌ **FT thua** (1 trường sai) |
-| 6 | "...chuột không dây mã đơn VN232232. Cho tôi trả lại." | 1.0 | `{"intent": "doi_tra", "urgency": "cao", "sentiment": "tich_c...` | ✅ FT thắng |
+| i=3 | "...bình giữ nhiệt mã đơn VN804124. Chưa thấy tiền." | 0.75 | `{"intent": "hoan_tien", "urgency": "trung_binh", "product": "bình giữ nhiệt", "sentiment": ...}` | ❌ **FT thua** (1/4 trường sai) |
+| i=5 | "...nồi chiên không dầu mã đơn DH249548. Thiếu phụ kiện." | 0.75 | `{"intent": "san_pham_loi", "urgency": "trung_binh", "product": "nồi chiên không dầu", "sen...}` | ❌ **FT thua** (1/4 trường sai) |
+| i=12 | "...áo khoác gió mã đơn VN613097. Bị lỗi. Khi nào tiện." | 0.75 | `{"intent": "san_pham_loi", "urgency": "trung_binh", "product": "áo khoác gió", "sentiment"...}` | ❌ **FT thua** (1/4 trường sai) |
+| i=39 | "...nồi chiên không dầu mã đơn VN949966. Hoàn tiền." | 0.75 | `{"intent": "hoan_tien", "urgency": "trung_binh", "product": "nồi chiên không dầu", "sentim...}` | ❌ **FT thua** (1/4 trường sai) |
+| i=0 | "...chuột không dây mã đơn VN232232. Cho tôi trả lại." | 1.0 | `{"intent": "doi_tra", "urgency": "cao", "product": "chuột không dây", "sentiment": "tich_c...}` | ✅ FT thắng |
+| i=4 | "...đèn bàn LED mã đơn VN339109. Vỡ khi nhận. Gấp." | 1.0 | `{"intent": "san_pham_loi", "urgency": "cao", "product": "đèn bàn LED", "sentiment": "trung...}` | ✅ FT thắng |
+| i=49 | "...ốp lưng điện thoại mã đơn VN833689. Sai màu. Sớm nhé." | 1.0 | `{"intent": "san_pham_loi", "urgency": "trung_binh", "product": "ốp lưng điện thoại", "sent...}` | ✅ FT thắng |
 
-Có mẫu chung nào ở các ca FT thua không? Cả hai ca thua (#4, #5) đều liên quan ticket
-**không phải yêu cầu đổi/trả rõ ràng** — "chưa thấy tiền" (nghi ngờ hoàn tiền chưa xử lý)
-và "thiếu phụ kiện" (lỗi sản phẩm nhưng không nói thẳng "lỗi") — tức các trường hợp
-`intent`/`sentiment` phải suy luận gián tiếp từ ngữ cảnh thay vì có từ khóa tường minh
-("trả lại", "đổi"). Giả thuyết: model học tốt các mẫu có từ khóa trực tiếp trong 250 mẫu
-train, nhưng yếu hơn ở các ca cần suy luận ngữ nghĩa. *(Cần xác nhận lại với nhãn đúng đầy
-đủ từ `qualitative.json` — bảng trên là suy đoán từ log rút gọn.)*
+Có mẫu chung nào ở các ca FT thua không? Cả 4 ca thua (i=3, 5, 12, 39) đều là ticket **có
+nhiều khả năng dẫn tới nhầm `intent`** giữa các nhãn gần nghĩa — "chưa thấy tiền"
+(`hoan_tien` hay `van_chuyen`?), "thiếu phụ kiện"/"bị lỗi" (`san_pham_loi` hay `doi_tra`?) —
+tức các trường hợp ranh giới nhãn mờ, cần suy luận ngữ cảnh thay vì khớp từ khóa trực tiếp
+("trả lại" → `doi_tra` rõ ràng). Giả thuyết: 250 mẫu train chưa đủ đa dạng các ca biên giữa
+`hoan_tien`/`van_chuyen`/`san_pham_loi`/`doi_tra` khi tín hiệu ngữ nghĩa yếu.
 
 ---
 
 ## 7. Kết luận & điều tôi học được
 
-**Kết luận (≥150 từ, dự thảo — điền lại số full trước khi nộp).**
+**Kết luận (≥150 từ).**
 
-Dựa trên run SMOKE, bản fine-tune (c) đáng để deploy: nó vượt baseline đã prompt tối ưu
-(b) 0.250 điểm target (0.938 vs 0.688) mà không đánh đổi năng lực chung (regression giữ
-nguyên 0.750), và cổng hồi quy 4 nhóm PASS. Đây không phải một chiến thắng "rẻ" nhờ so
-với baseline yếu — `verify.py` xác nhận (b) đã thật sự mạnh hơn (a) và prompt (b) không
-bị làm yếu đi, nên khoảng cách 0.250 là so với đối thủ đã cố gắng hết sức bằng prompting.
-Đòn bẩy thật sự trong lab này, theo dữ liệu đo được, là **chất lượng dữ liệu + đúng cấu
-hình learning rate** — không phải vị trí gắn adapter. Bằng chứng: `attn_only` (chỉ q,v)
-khi đã khớp ngân sách tham số với `correct` (khác biệt vị trí gắn) cho kết quả target
-**hoà tuyệt đối** (0.938 = 0.938) — vị trí không tạo khác biệt đo được. Ngược lại,
-`wrong_lr` (chỉ đổi một con số LR) khiến target **sập về 0**, chứng minh LR đúng thang là
-điều kiện sống còn hơn nhiều so với việc chọn gắn adapter vào đâu. Rank (ngân sách tham
-số) mới là biến quan trọng thứ hai, thể hiện qua việc `attn_only` phải nâng r lên 283 để
-bù cho việc chỉ gắn 2 module thay vì 12 — nếu không match rank, phép so sánh vị trí sẽ vô
-nghĩa (đúng như cảnh báo 2.5 của rubric). *(Kết luận này cần xác nhận lại bằng số liệu
-full-eval trước khi coi là cuối cùng — n=8 quá nhỏ để chắc chắn 100%.)*
+Với dữ liệu và cấu hình đo được, **không nên deploy bản fine-tune `correct` này ở dạng
+hiện tại** — cổng hồi quy bốn-nhóm FAILED, không phải vì lỗi pipeline mà vì catastrophic
+forgetting thật: target tăng mạnh (+0.205, từ 0.765 lên 0.970) nhưng regression sập
+-0.124 (từ 0.7578 xuống 0.6333), vượt xa dung sai ±0.020. Một hệ thống production không
+thể chấp nhận đánh đổi năng lực chung để lấy accuracy trên một tác vụ hẹp — model sẽ trả
+lời sai các câu hỏi ngoài phạm vi triage mà trước đó nó trả lời đúng. Hướng sửa rõ ràng
+theo deck §14.3: trộn 1-5% dữ liệu kiến thức phổ thông vào tập train rồi chạy lại toàn bộ
+pipeline để xác nhận regression được giữ trong dung sai mà không hy sinh nhiều target.
+Đòn bẩy thật sự trong lab này, tách bạch theo từng thí nghiệm: **rank/ngân sách tham số**
+quyết định độ chính xác trên tác vụ (không phải vị trí gắn adapter — `attn_only` hoà tuyệt
+đối với `correct` khi ngân sách khớp); **learning rate đúng thang** là điều kiện sống còn
+tuyệt đối (`wrong_lr` sập về 0 chỉ vì đổi một con số); và **thành phần dữ liệu train**
+(thiếu replay) là nguyên nhân trực tiếp của thất bại ở cổng hồi quy — ba đòn bẩy này độc
+lập với nhau, và bài học lớn nhất của lab là target tăng không đồng nghĩa "nên deploy" nếu
+không kiểm tra đủ bốn nhóm.
 
 **Ba điều tôi học được** (cụ thể, không generic):
 1. Train loss thấp không đồng nghĩa target accuracy cao — `attn_only` có train loss thấp
-   hơn `correct` (0.538 vs 0.626) nhưng target accuracy bằng nhau; chấm điểm bằng loss
-   thay vì chỉ số tác vụ thật (như rubric 2.5 cảnh báo) sẽ ra kết luận sai thứ tự.
-2. Một sai số LR (10 lần) không "làm chậm học" mà làm **sập hoàn toàn** cả target lẫn
-   format, trong khi train loss cuối vẫn "trông tạm ổn" (1.57) — đây là bẫy dễ bỏ sót
-   nếu chỉ theo dõi loss curve mà không có bộ eval độc lập.
-3. QLoRA tiết kiệm VRAM thật (41%) nhưng trả giá bằng accuracy thật (~10% target) trên
-   Qwen3.5 ở tier T4 — khi VRAM không phải nút thắt (T4 16GB đủ cho bản 16-bit), không có
-   lý do đánh đổi.
+   hơn `correct` (0.5385 vs 0.6263) nhưng target accuracy bằng nhau tuyệt đối (0.970);
+   chấm điểm bằng loss thay vì chỉ số tác vụ thật (rubric 2.5) sẽ ra kết luận sai.
+2. Một fine-tune "thắng" rõ trên metric chính (target +0.205) vẫn có thể là một thất bại
+   toàn cục nếu không đo song song năng lực chung — nếu lab này chỉ có một baseline target
+   mà không có nhóm regression, tôi đã kết luận nhầm "PASS" và đề xuất deploy.
+3. Một sai số LR (10 lần) không "làm chậm học" mà làm **sập hoàn toàn** cả target lẫn
+   format, và còn để lộ dấu hiệu qua latency tăng vọt (5087.7ms, gấp 5.5 lần) — dấu hiệu dễ
+   quan sát hơn cả việc chờ tính target score.
 
-**Nếu có thêm 2 giờ nữa, tôi sẽ thử:** chạy full eval (bỏ `EVAL_LIMIT`) để xác nhận các
-con số SMOKE ở trên vẫn đúng hướng trên toàn bộ 50/15 mẫu; sau đó thử B4 (quét rank có
-kiểm soát r ∈ {8,16,64} ở text-linear) để trả lời câu hỏi rank thật sự cần bao nhiêu là
-đủ, vì ở lab này attn_only đã phải nâng lên r=283 chỉ để hoà — chưa rõ liệu correct ở
-r=16 đã tối ưu hay còn dư địa.
+**Nếu có thêm 2 giờ nữa, tôi sẽ thử:** trộn 1-5% dữ liệu phổ thông (câu hỏi kiến thức
+chung, không liên quan CSKH) vào 225 mẫu train, chạy lại `correct` với đúng cấu hình hiện
+tại, và so sánh trực tiếp regression Δ trước/sau replay — mục tiêu đưa Δ về trong dung sai
+±0.020 mà vẫn giữ phần lớn mức tăng target +0.205. Sau đó thử B4 (quét rank có kiểm soát
+r ∈ {8,16,64} ở text-linear) để trả lời câu hỏi rank thật sự cần bao nhiêu là đủ cho tác vụ
+này, vì `attn_only` đã cần nâng lên r=283 chỉ để hoà `correct` ở r=16.
 
 ---
 
@@ -238,17 +241,3 @@ r=16 đã tối ưu hay còn dư địa.
 - [ ] B3 reasoning-trace collapse (hai `MASK_MODE`, kèm `valid_trace_rate`)
 - [ ] B4 quét rank có kiểm soát
 - [ ] B5 HuggingFace Hub — link:
-
----
-
-## Việc còn lại trước khi nộp (checklist)
-
-1. [ ] Sửa 3 unit test FAIL trên Colab (chưa rõ tên test — xem hướng dẫn ở tin nhắn).
-2. [ ] Chạy lại pipeline **không** đặt `EVAL_LIMIT` (bỏ dòng đó khỏi `.env` hoặc
-       `%env EVAL_LIMIT=` rồi unset) → NB2 + NB5 tối thiểu, để có target n=50, regression n=15.
-3. [ ] Ghi đè toàn bộ `results/*.json` + `results/runs.csv` bằng bản full mới.
-4. [ ] Điền lại mục 3–7 ở trên bằng số full (xóa các dòng ⚠️ SMOKE).
-5. [ ] Điền **Họ tên / MSSV** ở đầu file.
-6. [ ] Chạy `!python scripts/verify.py` trên Colab (hoặc `.venv/Scripts/python scripts/verify.py`
-       local sau khi copy `results/` về) → phải thấy dòng cuối `Ready to submit.`
-7. [ ] Push lên GitHub theo hướng dẫn bên dưới.
