@@ -1,6 +1,6 @@
 # Lab 21 — Evaluation Report
 
-**Họ tên**: <điền>  **MSSV**: <điền>  **Ngày**: 2026-08-21
+**Họ tên**: Ngô Mạnh Minh Huy  **MSSV**: 2A202601926  **Ngày**: 2026-08-22
 **Tier**: `T4`  **Base model**: `unsloth/Qwen3.5-4B`  **GPU thực tế**: `<điền sau khi chạy Colab — T4 16GB>`
 
 > Mọi con số dưới đây phải khớp với file trong `results/`. Grader kiểm tra chéo.
