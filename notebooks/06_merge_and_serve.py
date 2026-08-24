@@ -69,7 +69,11 @@ merged.save_pretrained(out); tok.save_pretrained(out)
 report.write_json({"before_merge": before, "after_merge": after, "delta": delta,
                    "tolerance": TOL, "n": len(target)},
                   "merge_check.json", results_dir=ROOT / "results")
-del merged; generate.free_memory()
+# `model` (step 1's PeftModel) still holds the base weights `merge_and_unload()` reused --
+# leaving it alive here starves the fresh `load_base()` below of VRAM, which makes
+# `device_map="auto"` silently offload layers to CPU and PeftModel's dispatch then fails
+# for lack of an `offload_dir`. Free both references, not just the merged one.
+del model, merged; generate.free_memory()
 
 # %% [markdown]
 # ## 3. Một base, nhiều adapter — hoán đổi theo request
