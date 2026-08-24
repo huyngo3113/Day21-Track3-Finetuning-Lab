@@ -12,7 +12,8 @@
 > tests.fake_tokenizer import ...` thay vì `from fake_tokenizer import ...` như mọi file
 > test khác trong repo dùng) — đã sửa, xác nhận pass local. `adapters/correct/*.safetensors`
 > (123.91 MB) vượt giới hạn 100MB của GitHub — không push kèm repo; adapter config/tokenizer
-> vẫn có trong `adapters/correct/`, trọng số đầy đủ đang chờ push lên HuggingFace Hub (B5).
+> vẫn có trong `adapters/correct/`, trọng số đầy đủ đã push lên HuggingFace Hub (B5):
+> https://huggingface.co/huyngo3113/lab21-2A202601926-qwen35-triage-vi
 
 ---
 
@@ -290,4 +291,4 @@ Xem mục 4.4 ở trên — r ∈ {8, 16, 64} tại cùng vị trí text-linear,
 - [ ] B2 dataset miền riêng (`data/CUSTOM_DATASET.md`)
 - [ ] B3 reasoning-trace collapse (hai `MASK_MODE`, kèm `valid_trace_rate`)
 - [x] B4 quét rank có kiểm soát
-- [ ] B5 HuggingFace Hub — link:
+- [x] B5 HuggingFace Hub — link: https://huggingface.co/huyngo3113/lab21-2A202601926-qwen35-triage-vi
