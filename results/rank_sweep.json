@@ -1,0 +1,26 @@
+[
+  {
+    "run": "rank_sweep_r8",
+    "r": 8,
+    "target": 0.87,
+    "format": 1.0,
+    "latency_ms": 1403.9,
+    "n": 50
+  },
+  {
+    "run": "correct",
+    "r": 16,
+    "target": 0.97,
+    "format": 1.0,
+    "latency_ms": 1425.8,
+    "n": 50
+  },
+  {
+    "run": "rank_sweep_r64",
+    "r": 64,
+    "target": 1.0,
+    "format": 1.0,
+    "latency_ms": 1325.9,
+    "n": 50
+  }
+]
