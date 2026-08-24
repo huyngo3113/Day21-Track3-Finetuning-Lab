@@ -287,8 +287,21 @@ base mới).
 Xem mục 4.4 ở trên — r ∈ {8, 16, 64} tại cùng vị trí text-linear, target tăng đơn điệu
 0.87 → 0.97 → 1.00, lợi ích giảm dần theo rank.
 
+### B2 — Dataset miền riêng: CHƯA CHẠY, chỉ mới chuẩn bị xong
+
+`scripts/make_custom_dataset.py` + `data/CUSTOM_DATASET.md` đã viết và test xong: 260 mẫu
+train + 50 eval_target + 30 holdout, miền **ticket hỗ trợ CNTT nội bộ doanh nghiệp** (khác
+hẳn CSKH thương mại điện tử của corpus mặc định), cùng schema 4 khoá nên tương thích toàn
+bộ code chấm điểm không cần sửa. Đã xác nhận chạy NB1 (mask proof) trên corpus mới thành
+công cục bộ (`supervised_fraction=0.39`, cả hai assert xanh) — nhưng **KHÔNG train lại toàn
+bộ pipeline trên corpus này**, vì đổi corpus làm mọi baseline/adapter/verdict đã đóng băng
+ở mục 1-7 phía trên vô hiệu, cần ~3 giờ GPU để chạy lại NB1→NB6+rank_sweep, ngoài ngân sách
+thời gian của lần nộp này. **Corpus đang hoạt động trong `data/*.jsonl` vẫn là bản mặc định
+gốc** — mọi số liệu ở mục 1-7 đo trên corpus gốc, nhất quán với `results/`. Coi đây là B2
+"đã chuẩn bị hạ tầng, chưa chạy" — không claim +3 điểm đầy đủ, chỉ ghi nhận công việc đã làm.
+
 - [x] B1 NB6 merge + hot-swap
-- [ ] B2 dataset miền riêng (`data/CUSTOM_DATASET.md`)
+- [~] B2 dataset miền riêng — script + `CUSTOM_DATASET.md` xong, **chưa train lại** (xem trên)
 - [ ] B3 reasoning-trace collapse (hai `MASK_MODE`, kèm `valid_trace_rate`)
 - [x] B4 quét rank có kiểm soát
 - [x] B5 HuggingFace Hub — link: https://huggingface.co/huyngo3113/lab21-2A202601926-qwen35-triage-vi
