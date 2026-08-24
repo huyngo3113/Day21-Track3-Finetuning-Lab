@@ -6,11 +6,13 @@
 > Mọi con số dưới đây phải khớp với file trong `results/`. Grader kiểm tra chéo.
 >
 > **Trạng thái nộp bài**: NB1→NB5 chạy full trên Colab T4 (`EVAL_LIMIT` bỏ trống, n=50
-> target / n=15 regression). `results/*.json`, `runs.csv`, `adapters/correct/` đã push
-> lên repo. 3 unit test từng FAIL vì bug import trong `tests/test_env_and_silent_defaults.py`
-> (`from tests.fake_tokenizer import ...` thay vì `from fake_tokenizer import ...` như mọi
-> file test khác trong repo dùng — do `pyproject.toml` đặt `pythonpath = ["src", "tests"]`)
-> — đã sửa và xác nhận pass local.
+> target / n=15 regression). `results/*.json`, `runs.csv` đã push lên repo. Cả hai bonus
+> B1 (NB6 merge + hot-swap) và B4 (quét rank r∈{8,16,64}) đã chạy và push. 3 unit test
+> từng FAIL vì bug import trong `tests/test_env_and_silent_defaults.py` (`from
+> tests.fake_tokenizer import ...` thay vì `from fake_tokenizer import ...` như mọi file
+> test khác trong repo dùng) — đã sửa, xác nhận pass local. `adapters/correct/*.safetensors`
+> (123.91 MB) vượt giới hạn 100MB của GitHub — không push kèm repo; adapter config/tokenizer
+> vẫn có trong `adapters/correct/`, trọng số đầy đủ đang chờ push lên HuggingFace Hub (B5).
 
 ---
 
@@ -139,6 +141,27 @@ nhẹ) nhưng đánh đổi accuracy khá nhỏ so với mức tiết kiệm VRA
 nếu VRAM là nút thắt thật sự (tier LAPTOP 8GB), 3% target đổi lấy 41% VRAM là một đánh đổi
 hợp lý, không phải "cấm tuyệt đối" như khuyến nghị vendor gợi ý.
 
+**4.4 (Bonus B4) — Quét rank có kiểm soát, cố định vị trí = text-linear, r ∈ {8, 16, 64}.
+Khi nào rank mới là đòn bẩy?** *(results/rank_sweep.json)*
+
+| r | trainable | target | format | latency (ms) |
+|---|---|---|---|---|
+| 8 | 16,232,448 | 0.87 | 1.0 | 1403.9 |
+| 16 (`correct`) | 32,464,896 | 0.97 | 1.0 | 1425.8 |
+| 64 | 129,859,584 | 1.00 | 1.0 | 1325.9 |
+
+Ở **cùng một vị trí** (text-linear, không đổi placement như 4.1), target tăng đơn điệu
+theo rank: 0.87 → 0.97 → 1.00. Điều này trả lời trực tiếp câu hỏi B4: **rank là đòn bẩy
+thật khi vị trí gắn adapter đã cố định** — tăng rank tăng năng lực khớp dữ liệu train.
+Nhưng lợi ích giảm dần rõ rệt: r=8→16 (gấp đôi tham số) được +0.10 target; r=16→64 (gấp
+4 lần tham số) chỉ được thêm +0.03 và đã chạm trần 1.00 trên 50 mẫu target — nhiều khả
+năng là dấu hiệu ghi nhớ (memorization) trên tập train nhỏ (225 mẫu) hơn là năng lực tổng
+quát hoá thật, vì regression không được đo lại ở các rank này (script B4 chỉ chấm target,
+xem "Nếu có thêm 2 giờ nữa"). Kết hợp với 4.1 (vị trí không đổi kết quả khi đã khớp ngân
+sách rank): bức tranh đầy đủ là — **rank quyết định năng lực, vị trí gắn không quyết định
+(ở ngân sách đủ lớn)**, nhưng rank cao hơn không miễn phí — cần đo regression trước khi kết
+luận r=64 "tốt hơn" r=16 cho triển khai thật.
+
 ---
 
 ## 5. Phán quyết (NB5)
@@ -171,7 +194,10 @@ Nếu chỉ nhìn target Δ dương mà bỏ qua regression, sẽ kết luận n
 ## 6. Định tính — bắt buộc có cả ca THUA
 
 Trích từ `results/qualitative.json` (full n=50). Trường `ft_pred` bị cắt ở ~90 ký tự trong
-log gốc; điểm số (`ft_score`) là tỷ lệ 4 trường đúng/4. Không có cột "(b) prompt" và "nhãn
+log gốc (file đầy đủ 50/50 mục, xác nhận qua `results/qualitative.json`). Điểm số
+(`ft_score`) là tỷ lệ 4 trường đúng/4 — toàn bộ 50 mục chỉ có hai giá trị: 1.0 (44 mục) và
+0.75 (6 mục, đúng 3/4 trường), không có mục nào 0.0/0.25/0.5 — mọi lỗi của fine-tune đều
+là sai đúng một trường, chưa từng sai hoàn toàn cả 4. Không có cột "(b) prompt" và "nhãn
 đúng" đầy đủ trong export này — `qualitative.json` chỉ lưu `i, ticket, ft_score, ft_pred`;
 xem `data/eval_target.jsonl` dòng tương ứng `i` để đối chiếu nhãn gốc khi cần chi tiết hơn.
 
@@ -185,12 +211,17 @@ xem `data/eval_target.jsonl` dòng tương ứng `i` để đối chiếu nhãn 
 | i=4 | "...đèn bàn LED mã đơn VN339109. Vỡ khi nhận. Gấp." | 1.0 | `{"intent": "san_pham_loi", "urgency": "cao", "product": "đèn bàn LED", "sentiment": "trung...}` | ✅ FT thắng |
 | i=49 | "...ốp lưng điện thoại mã đơn VN833689. Sai màu. Sớm nhé." | 1.0 | `{"intent": "san_pham_loi", "urgency": "trung_binh", "product": "ốp lưng điện thoại", "sent...}` | ✅ FT thắng |
 
-Có mẫu chung nào ở các ca FT thua không? Cả 4 ca thua (i=3, 5, 12, 39) đều là ticket **có
-nhiều khả năng dẫn tới nhầm `intent`** giữa các nhãn gần nghĩa — "chưa thấy tiền"
-(`hoan_tien` hay `van_chuyen`?), "thiếu phụ kiện"/"bị lỗi" (`san_pham_loi` hay `doi_tra`?) —
-tức các trường hợp ranh giới nhãn mờ, cần suy luận ngữ cảnh thay vì khớp từ khóa trực tiếp
-("trả lại" → `doi_tra` rõ ràng). Giả thuyết: 250 mẫu train chưa đủ đa dạng các ca biên giữa
-`hoan_tien`/`van_chuyen`/`san_pham_loi`/`doi_tra` khi tín hiệu ngữ nghĩa yếu.
+Có mẫu chung nào ở các ca FT thua không? Toàn bộ tập target (n=50) có đúng **6 ca thua**
+(i=3, 5, 12, 39, 41, 46 — 4 ca đầu ở bảng trên, cộng i=41 "giao hàng chậm" và i=46 "sai
+màu"), tất cả đều điểm 0.75 (sai đúng 1/4 trường, không có ca nào sai từ 2 trường trở lên).
+Điểm chung: đều là ticket **có nhiều khả năng dẫn tới nhầm `intent`** giữa các nhãn gần
+nghĩa — "chưa thấy tiền" (`hoan_tien` hay `van_chuyen`?), "thiếu phụ kiện"/"bị lỗi"
+(`san_pham_loi` hay `doi_tra`?), "giao hàng chậm" (`van_chuyen` rõ nhưng có thể lẫn
+`hoi_thong_tin`) — tức các trường hợp ranh giới nhãn mờ, cần suy luận ngữ cảnh thay vì khớp
+từ khóa trực tiếp ("trả lại" → `doi_tra` rõ ràng). Giả thuyết: 250 mẫu train chưa đủ đa
+dạng các ca biên giữa `hoan_tien`/`van_chuyen`/`san_pham_loi`/`doi_tra` khi tín hiệu ngữ
+nghĩa yếu. Đáng chú ý: **không ca nào sai hoàn toàn** (0.0) — model luôn bắt đúng ít nhất
+3/4 trường, nhất quán với target trung bình rất cao (0.970).
 
 ---
 
@@ -236,8 +267,27 @@ này, vì `attn_only` đã cần nâng lên r=283 chỉ để hoà `correct` ở
 
 ## Phụ lục — thưởng đã làm
 
-- [ ] B1 NB6 merge + hot-swap
+### B1 — NB6: merge + assert không tụt điểm + hot-swap
+
+*(results/merge_check.json)*
+
+| | trước merge | sau merge | Δ |
+|---|---|---|---|
+| target (n=50) | 0.9700 | 0.9700 | +0.0000 |
+
+Merge `W = W₀ + (α/r)·BA` giữ nguyên tuyệt đối điểm target — không tụt (ngưỡng cho phép
+±0.01, đạt Δ=0.0000). Đã hot-swap thành công `correct` trên cùng một base model đang nạp
+trong VRAM (phần 3 của NB6, sau khi sửa lỗi rò VRAM giữa bước merge và bước hot-swap —
+xem `notebooks/06_merge_and_serve.py`, commit sửa lỗi `del model` thiếu trước khi load
+base mới).
+
+### B4 — Quét rank có kiểm soát
+
+Xem mục 4.4 ở trên — r ∈ {8, 16, 64} tại cùng vị trí text-linear, target tăng đơn điệu
+0.87 → 0.97 → 1.00, lợi ích giảm dần theo rank.
+
+- [x] B1 NB6 merge + hot-swap
 - [ ] B2 dataset miền riêng (`data/CUSTOM_DATASET.md`)
 - [ ] B3 reasoning-trace collapse (hai `MASK_MODE`, kèm `valid_trace_rate`)
-- [ ] B4 quét rank có kiểm soát
+- [x] B4 quét rank có kiểm soát
 - [ ] B5 HuggingFace Hub — link:
