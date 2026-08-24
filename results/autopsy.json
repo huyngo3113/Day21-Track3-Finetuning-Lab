@@ -5,5 +5,26 @@
     "format": 1.0,
     "latency_ms": 1431.1,
     "n": 50
+  },
+  {
+    "run": "attn_only",
+    "target": 0.97,
+    "format": 1.0,
+    "latency_ms": 901.5,
+    "n": 50
+  },
+  {
+    "run": "wrong_lr",
+    "target": 0.0,
+    "format": 0.0,
+    "latency_ms": 5087.7,
+    "n": 50
+  },
+  {
+    "run": "qlora",
+    "target": 0.94,
+    "format": 1.0,
+    "latency_ms": 1747.1,
+    "n": 50
   }
 ]
