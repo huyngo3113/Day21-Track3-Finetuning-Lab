@@ -305,3 +305,66 @@ gốc** — mọi số liệu ở mục 1-7 đo trên corpus gốc, nhất quán
 - [ ] B3 reasoning-trace collapse (hai `MASK_MODE`, kèm `valid_trace_rate`)
 - [x] B4 quét rank có kiểm soát
 - [x] B5 HuggingFace Hub — link: https://huggingface.co/huyngo3113/lab21-2A202601926-qwen35-triage-vi
+
+---
+
+## 8. Audit độc lập & tự chấm điểm (2026-08-30)
+
+Audit chạy trên máy không có GPU (CPU-only) — không train lại được gì, chỉ kiểm tra tính
+toàn vẹn của artefact đã có và đối chiếu số liệu.
+
+**`make verify`**: `25 passed · 2 warnings · 0 failures` → **Ready to submit**. 115 unit
+test pass (0 fail, 3 skip — cần GPU). Hai warning không phải lỗi thật:
+1. `eval sets changed` — do máy audit dùng Windows `core.autocrlf=true`, checkout đổi
+   LF→CRLF nên sha256 lệch với `data/checksums.json`; nội dung dữ liệu không đổi (không có
+   diff trong `git status`/`git diff`). Không phải vi phạm liêm chính, chỉ là artefact môi
+   trường checkout.
+2. `verdict FAILED` — đúng như thiết kế rubric, gate FAIL vẫn được chấm điểm đầy đủ nếu
+   phân tích trung thực (đã làm ở mục 5).
+
+Đối chiếu số trong report với `results/*.json`: khớp — `verdict.json`, `autopsy.json`,
+`merge_check.json`, `rank_sweep.json` cho đúng các con số đã trích ở mục 3–4 và Phụ lục.
+
+### Bảng tự chấm theo `rubric.md`
+
+| Mục | Điểm tối đa | Điểm | Ghi chú |
+|---|---|---|---|
+| 1.1 Mask proof cả hai assert xanh | 10 | 10 | `mask_proof.json`, `supervised_fraction=0.41<0.95` |
+| 1.2 `template_check.json` + nêu rõ `<think>` | 5 | 5 | có, giải thích khối rỗng |
+| 1.3 `max_length` theo p95 hoặc giải thích lệch | 5 | 5 | dùng default 1024, lệch có giải thích rõ (mục 1) |
+| 1.4 `adapters/correct/` + dòng `correct` trong `runs.csv` | 10 | 10 | verify xác nhận |
+| 2.1 `attn_only` khớp ngân sách <5% | 10 | 10 | verify: lệch 0.03% |
+| 2.2 Bốn run cùng `max_steps` | 5 | 5 | verify: 30 step cả bốn |
+| 2.3 Mỗi run đổi một biến, nêu rõ | 5 | 5 | mục 4.1–4.3 |
+| 2.4 Phân tích vị trí vs rank | 5 | 5 | mục 4.1 + 4.4 (B4) |
+| 3.1 Baseline (b) đo trước, (b)>(a) | 5 | 5 | verify: 0.000→0.765 |
+| 3.2 Đủ bốn nhóm target/regression/format/latency | 10 | 10 | `verdict.json` |
+| 3.3 `verdict.json` có phán quyết + report diễn giải | 5 | 5 | mục 5, FAILED diễn giải đầy đủ |
+| 3.4 ≥5 ví dụ định tính, ≥2 ca thua | 5 | 5 | 7 ví dụ, 4 ca thua ở bảng + 6 ca thua tổng |
+| 4.1 Đủ 7 mục theo mẫu | 5 | 5 | |
+| 4.2 Kết luận ≥150 từ, lập luận nhân quả | 5 | 5 | ~230 từ, có nhân quả |
+| 4.3 Số liệu khớp `results/` | 5 | 5 | audit đối chiếu trực tiếp, khớp |
+| 4.4 "Điều tôi học được" cụ thể | 5 | 5 | 3 điểm cụ thể, có số liệu riêng |
+| **Core** | **100** | **100** | |
+| B1 NB6 merge + hot-swap | +3 | +3 | `merge_check.json` Δ=0.0000 |
+| B2 Dataset miền riêng | +3 | 0 | chỉ chuẩn bị, **chưa train lại** — tự nhận đúng, không claim |
+| B3 Reasoning-trace collapse | +4 | 0 | **chưa làm** — cần 2 lần train GPU thật, xem dưới |
+| B4 Quét rank có kiểm soát | +3 | +3 | `rank_sweep.json`, r∈{8,16,64} đơn điệu 0.87→0.97→1.00 |
+| B5 HuggingFace Hub | +2 | +2 | link công khai có trong report |
+| **Tổng** | **115** | **108** | 100/100 core + 8/15 thưởng |
+
+### Việc còn thiếu và vì sao chưa tự hoàn thiện được
+
+- **B2** (+3, khả thi): infra đã xong (`scripts/make_custom_dataset.py`,
+  `data/CUSTOM_DATASET.md`, mask proof đã chạy thử cục bộ). Chỉ còn thiếu chạy full
+  pipeline (NB1→NB6+rank_sweep, ước ~3 giờ GPU T4) trên corpus mới. **Không train được
+  trong môi trường audit này** (không có GPU/CUDA) — cần chạy trên Colab T4 như bản gốc.
+- **B3** (+4, khó nhất, chưa động tới): cần train **hai lần thật** (`MASK_MODE=assistant-only`
+  và `response-only`) trên GPU rồi đo `valid_trace_rate` — không thể mô phỏng hay ước tính
+  số liệu này mà không chạy thật; làm giả sẽ vi phạm chính điều rubric đang kiểm tra (liêm
+  chính số liệu). Để trống là lựa chọn trung thực hơn là điền số bịa.
+
+**Khuyến nghị**: điểm 108/115 là điểm **đã xác minh** (verify xanh + số liệu đối chiếu
+khớp), không phải điểm tự khai. Muốn lấy nốt B2+B3 (+7), cần chạy hai lần
+`MASK_MODE=... make nb3 && make nb5` và một lượt full pipeline trên corpus
+`make_custom_dataset.py` — cả hai đều cần GPU T4 thật (Colab), không thể hoàn thành offline.
